@@ -1,0 +1,54 @@
+---
+title: "Power Computation"
+author: "Niklas Felix Cypris"
+date: "`r Sys.Date()` "
+output:
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(broom.mixed)
+library(paramtest)
+
+
+set.seed(161)
+Sys.setenv(LANG = "en")
+theme_set(theme_classic())
+
+# HELPER FUNCTIONS
+
+cen <- function(x) scale(x, scale = FALSE)[,1]
+
+fun_barplot <- function(x)
+{
+  ggplot2::ggplot(df, aes(x))+
+        geom_bar() +
+        theme_classic()
+}
+```
+
+# Functions
+
+```{r}
+sim <- function(simNum, N){
+  
+  participant <- rep(c(1:N), each = 8)
+  participant_var <- rep(rnorm(N), each = 8)
+  
+  target <- rep(c(0,1), times = (N/2) * 8) # 0 = self, 1 = other
+  goal <- rep(c(0,1), each = (N/2) * 8) # 0 = counterspeech, 1 = advertisement
+  inference <- rep(c(0,0,1,1), times = (N/4) * 8) # 0 = direct, 1 = indirect
+  
+  error <- rnorm(N * 8)
+  
+  usage <- b1 * target + b2 * goal + b3 * inference XXXX CONTINUE HERE
+  
+}
+
+```
+
