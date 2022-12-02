@@ -63,12 +63,6 @@ sim <- function(simNum,
 ```
 
 ```{r}
-tmp <- tibble(x = js, y = usage, colo = target)
-ggplot(tmp, aes(x,y,color = as_factor(colo)))+geom_smooth(method = "lm")
-```
-
-
-```{r}
 power <- grid_search(sim, 
                      params=list(N = seq(200, 400, 50), i_eff = c(-.1, -.2)),
                      n.iter = 2000,
