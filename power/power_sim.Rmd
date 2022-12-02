@@ -12,43 +12,92 @@ output:
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(lmerTest)
 library(broom.mixed)
 library(paramtest)
+library(parallel)
+library(beepr)
 
 
 set.seed(161)
 Sys.setenv(LANG = "en")
 theme_set(theme_classic())
-
-# HELPER FUNCTIONS
-
-cen <- function(x) scale(x, scale = FALSE)[,1]
-
-fun_barplot <- function(x)
-{
-  ggplot2::ggplot(df, aes(x))+
-        geom_bar() +
-        theme_classic()
-}
 ```
 
 # Functions
 
 ```{r}
-sim <- function(simNum, N){
+sim <- function(simNum, 
+                N, 
+                t_eff = -.5, # from literature
+                g_eff = -.25,
+                i_eff = -.25,
+                js_eff = -.2){
   
-  participant <- rep(c(1:N), each = 8)
+  id <- rep(c(1:N), each = 8)
   participant_var <- rep(rnorm(N), each = 8)
   
-  target <- rep(c(0,1), times = (N/2) * 8) # 0 = self, 1 = other
-  goal <- rep(c(0,1), each = (N/2) * 8) # 0 = counterspeech, 1 = advertisement
-  inference <- rep(c(0,0,1,1), times = (N/4) * 8) # 0 = direct, 1 = indirect
+  target <- rep(c(0,1), times = (N/2) * 8) # 0 = other, 1 = self
+  goal <- rep(c(0,0,1,1), times = (N/4) * 8) # 0 = counterspeech, 1 = advertisement
+  inference <- rep(c(0,0,0,0,1,1,1,1), times = N) # 0 = direct, 1 = indirect
+  
+  js <- rep(rnorm(N), each = 8)
+  js_target_diff <- t_eff - js_eff
   
   error <- rnorm(N * 8)
   
-  usage <- b1 * target + b2 * goal + b3 * inference XXXX CONTINUE HERE
+  usage <- ifelse(target == 1, t_eff, 0)
+  usage <- ifelse(goal == 1, usage + g_eff, usage)
+  usage <- ifelse(inference == 1, usage + i_eff, usage)
+  usage <- usage + (js_eff * js + js_eff) * target # added js_eff for rough approximation of effect
+  usage <- usage + error + participant_var
+  usage <- usage - mean(usage) # to make the mean = 0
   
+  mlm <- lmerTest::lmer(usage ~ target * goal * inference * js + (1 | id))
+  
+  out <- broom.mixed::tidy(mlm)
+  
+  return(out = out)
 }
 
+```
+
+```{r}
+tmp <- tibble(x = js, y = usage, colo = target)
+ggplot(tmp, aes(x,y,color = as_factor(colo)))+geom_smooth(method = "lm")
+```
+
+
+```{r}
+power <- grid_search(sim, 
+                     params=list(N = seq(200, 400, 50), i_eff = c(-.1, -.2)),
+                     n.iter = 2000,
+                     output ='data.frame',
+                     parallel = 'snow',
+                     ncpus = detectCores(),
+                     beep = 1)
+```
+
+```{r}
+power %>% 
+  results() %>% 
+  filter(term %in% c("target", "goal", "inference", "target:js")) %>% 
+  group_by(i_eff.test, N.test, term) %>% 
+  summarise(b1 = mean(estimate),
+            power = mean(p.value < .05))
+```
+
+```{r}
+power %>% 
+  results() %>% 
+  filter(term %in% c("target", "goal", "inference", "target:js")) %>% 
+  group_by(N.test, i_eff.test, term) %>% 
+  summarise(estimate = mean(estimate),
+            power = mean(p.value < .05)) %>% 
+  ggplot(aes(x = N.test, y = power, color = as_factor(term))) +
+  geom_line() +
+  facet_wrap(vars(i_eff.test))+
+  geom_hline(yintercept = .9) +
+  xlab("Sample Size")
 ```
 
