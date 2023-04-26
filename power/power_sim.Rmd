@@ -46,11 +46,7 @@ sim <- function(simNum,
   
   error <- rnorm(N * 8)
   
-  usage <- ifelse(target == 1, t_eff, 0)
-  usage <- ifelse(goal == 1, usage + g_eff, usage)
-  usage <- ifelse(inference == 1, usage + i_eff, usage)
-  usage <- usage + (js_eff * js + js_eff) * target # added js_eff for rough approximation of effect
-  usage <- usage + error + participant_var
+  usage <- target * t_eff + goal * g_eff + inference * i_eff + (js_eff * js + js_eff) * target + error + participant_var # added js_eff for rough approximation of effect
   usage <- usage - mean(usage) # to make the mean = 0
   
   mlm <- lmerTest::lmer(usage ~ target * goal * inference * js + (1 | id))
@@ -59,7 +55,6 @@ sim <- function(simNum,
   
   return(out = out)
 }
-
 ```
 
 ```{r}
