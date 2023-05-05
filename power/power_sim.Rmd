@@ -27,12 +27,13 @@ theme_set(theme_classic())
 # Functions
 
 ```{r}
-sim <- function(simNum, 
+sim_mlm <- function(simNum, 
                 N, 
-                t_eff = -.5, # from literature
-                g_eff = -.25,
-                i_eff = -.25,
-                js_eff = -.2){
+                target_b = .5, # from literature
+                goal_b = -.25,
+                inference_b = -.25,
+                js_main_b = -.2,
+                js_int_b = (js_main_b * -1)){
   
   id <- rep(c(1:N), each = 8)
   participant_var <- rep(rnorm(N), each = 8)
@@ -42,11 +43,10 @@ sim <- function(simNum,
   inference <- rep(c(0,0,0,0,1,1,1,1), times = N) # 0 = direct, 1 = indirect
   
   js <- rep(rnorm(N), each = 8)
-  js_target_diff <- t_eff - js_eff
   
   error <- rnorm(N * 8)
   
-  usage <- target * t_eff + goal * g_eff + inference * i_eff + (js_eff * js + js_eff) * target + error + participant_var # added js_eff for rough approximation of effect
+  usage <- target_b * target + goal_b * goal + inference_b * inference + js_main_b * js + js_int_b * js * target + error + participant_var
   usage <- usage - mean(usage) # to make the mean = 0
   
   mlm <- lmerTest::lmer(usage ~ target * goal * inference * js + (1 | id))
@@ -55,11 +55,42 @@ sim <- function(simNum,
   
   return(out = out)
 }
+
+sim_contrast <- function(simNum, 
+                N, 
+                target_b = .4, # from literature
+                goal_b = -.2,
+                inference_b = -.2,
+                js_main_b = -.2,
+                js_int_b = (js_main_b * -1)){
+  
+  id <- rep(c(1:N), each = 8)
+  participant_var <- rep(rnorm(N), each = 8)
+  
+  target <- rep(c(0,1), times = (N/2) * 8) # 0 = other, 1 = self
+  goal <- rep(c(0,0,1,1), times = (N/4) * 8) # 0 = counterspeech, 1 = advertisement
+  inference <- rep(c(0,0,0,0,1,1,1,1), times = N) # 0 = direct, 1 = indirect
+  
+  js <- rep(rnorm(N), each = 8)
+  
+  error <- rnorm(N * 8)
+  
+  usage <- target_b * target + goal_b * goal + inference_b * inference + js_main_b * js + js_int_b * js * target + error + participant_var
+  usage <- usage - mean(usage) # to make the mean = 0
+  
+  mlm <- lmerTest::lmer(usage ~ target * goal * inference * js + (1 | id))
+  
+  out <- broom::tidy(marginaleffects::avg_slopes(mlm))
+  
+  return(out = out)
+}
 ```
 
+# MLM
+
 ```{r}
-power <- grid_search(sim, 
-                     params=list(N = seq(200, 400, 50), i_eff = c(-.1, -.2)),
+power_mlm <- grid_search(sim_mlm, 
+                     params=list(N = seq(450, 550, 50)),
                      n.iter = 2000,
                      output ='data.frame',
                      parallel = 'snow',
@@ -68,25 +99,52 @@ power <- grid_search(sim,
 ```
 
 ```{r}
-power %>% 
+power_mlm %>% 
   results() %>% 
-  filter(term %in% c("target", "goal", "inference", "target:js")) %>% 
-  group_by(i_eff.test, N.test, term) %>% 
+  filter(term %in% c("target", "goal", "inference", "js", "target:js")) %>% 
+  group_by(N.test, term) %>% 
   summarise(b1 = mean(estimate),
             power = mean(p.value < .05))
 ```
 
 ```{r}
-power %>% 
+power_mlm %>% 
   results() %>% 
-  filter(term %in% c("target", "goal", "inference", "target:js")) %>% 
-  group_by(N.test, i_eff.test, term) %>% 
+  filter(term %in% c("target", "goal", "inference", "js", "target:js")) %>% 
+  mutate(predictor = as_factor(term)) %>% 
+  group_by(N.test, predictor) %>% 
   summarise(estimate = mean(estimate),
             power = mean(p.value < .05)) %>% 
-  ggplot(aes(x = N.test, y = power, color = as_factor(term))) +
+  ggplot(aes(x = N.test, y = power, color = predictor)) +
   geom_line() +
-  facet_wrap(vars(i_eff.test))+
   geom_hline(yintercept = .9) +
   xlab("Sample Size")
 ```
 
+# Contrasts
+
+```{r}
+power_contrast <- grid_search(sim_contrast, 
+                     params=list(N = seq(450, 550, 50)),
+                     inference_b = -.2,
+                     n.iter = 2000,
+                     output ='data.frame',
+                     parallel = 'snow',
+                     ncpus = detectCores(),
+                     beep = 1)
+```
+
+```{r}
+power_contrast %>% 
+  results() %>% 
+  filter(term %in% c("target", "goal", "inference")) %>% 
+  group_by(N.test, term) %>% 
+  summarise(b1 = mean(estimate),
+            power = mean(p.value < .05))
+```
+
+# Save
+
+```{r, eval=FALSE}
+save(power_mlm, power_contrast, file = "save_data.Rda")
+```
