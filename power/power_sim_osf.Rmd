@@ -1,0 +1,145 @@
+---
+title: "Power Computation"
+author: "Anonymous"
+date: "`r Sys.Date()` "
+output:
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lmerTest)
+library(broom.mixed)
+library(paramtest)
+library(parallel)
+library(beepr)
+
+
+set.seed(161)
+Sys.setenv(LANG = "en")
+theme_set(theme_classic())
+```
+
+# Functions
+
+```{r}
+sim_mlm <- function(simNum, 
+                N, 
+                target_b = .5, # from literature
+                goal_b = -.25,
+                inference_b = -.25,
+                js_main_b = -.2,
+                js_int_b = (js_main_b * -1)){
+  
+  id <- rep(c(1:N), each = 8)
+  participant_var <- rep(rnorm(N), each = 8)
+  
+  target <- rep(c(0,1), times = (N/2) * 8) # 0 = other, 1 = self
+  goal <- rep(c(0,0,1,1), times = (N/4) * 8) # 0 = counterspeech, 1 = advertisement
+  inference <- rep(c(0,0,0,0,1,1,1,1), times = N) # 0 = direct, 1 = indirect
+  
+  js <- rep(rnorm(N), each = 8)
+  
+  error <- rnorm(N * 8)
+  
+  usage <- target_b * target + goal_b * goal + inference_b * inference + js_main_b * js + js_int_b * js * target + error + participant_var
+  usage <- usage - mean(usage) # to make the mean = 0
+  
+  mlm <- lmerTest::lmer(usage ~ target * goal * inference * js + (1 | id))
+  
+  out <- broom.mixed::tidy(mlm)
+  
+  return(out = out)
+}
+
+sim_contrast <- function(simNum, 
+                N, 
+                target_b = .4, # from literature
+                goal_b = -.2,
+                inference_b = -.2,
+                js_main_b = -.2,
+                js_int_b = (js_main_b * -1)){
+  
+  id <- rep(c(1:N), each = 8)
+  participant_var <- rep(rnorm(N), each = 8)
+  
+  target <- rep(c(0,1), times = (N/2) * 8) # 0 = other, 1 = self
+  goal <- rep(c(0,0,1,1), times = (N/4) * 8) # 0 = counterspeech, 1 = advertisement
+  inference <- rep(c(0,0,0,0,1,1,1,1), times = N) # 0 = direct, 1 = indirect
+  
+  js <- rep(rnorm(N), each = 8)
+  
+  error <- rnorm(N * 8)
+  
+  usage <- target_b * target + goal_b * goal + inference_b * inference + js_main_b * js + js_int_b * js * target + error + participant_var
+  usage <- usage - mean(usage) # to make the mean = 0
+  
+  mlm <- lmerTest::lmer(usage ~ target * goal * inference * js + (1 | id))
+  
+  out <- broom::tidy(marginaleffects::avg_slopes(mlm))
+  
+  return(out = out)
+}
+```
+
+# MLM
+
+```{r}
+power_mlm <- grid_search(sim_mlm, 
+                     params=list(N = seq(450, 550, 50)),
+                     n.iter = 2000,
+                     output ='data.frame',
+                     parallel = 'snow',
+                     ncpus = detectCores(),
+                     beep = 1)
+```
+
+```{r}
+power_mlm %>% 
+  results() %>% 
+  filter(term %in% c("target", "goal", "inference", "js", "target:js")) %>% 
+  group_by(N.test, term) %>% 
+  summarise(b1 = mean(estimate),
+            power = mean(p.value < .05))
+```
+
+```{r}
+power_mlm %>% 
+  results() %>% 
+  filter(term %in% c("target", "goal", "inference", "js", "target:js")) %>% 
+  mutate(predictor = as_factor(term)) %>% 
+  group_by(N.test, predictor) %>% 
+  summarise(estimate = mean(estimate),
+            power = mean(p.value < .05)) %>% 
+  ggplot(aes(x = N.test, y = power, color = predictor)) +
+  geom_line() +
+  geom_hline(yintercept = .9) +
+  xlab("Sample Size")
+```
+
+# Contrasts
+
+```{r}
+power_contrast <- grid_search(sim_contrast, 
+                     params=list(N = seq(450, 550, 50)),
+                     inference_b = -.2,
+                     n.iter = 2000,
+                     output ='data.frame',
+                     parallel = 'snow',
+                     ncpus = detectCores(),
+                     beep = 1)
+```
+
+```{r}
+power_contrast %>% 
+  results() %>% 
+  filter(term %in% c("target", "goal", "inference")) %>% 
+  group_by(N.test, term) %>% 
+  summarise(b1 = mean(estimate),
+            power = mean(p.value < .05))
+```
+
