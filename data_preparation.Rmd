@@ -1,0 +1,264 @@
+---
+title: "Data Collection"
+author: "Niklas"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(janitor)
+library(visdat)
+library(psych)
+```
+
+```{r}
+get_alpha <- function(text, start, end) {
+  
+  df %>% 
+  select(num_range(prefix = text, range = start:end)) %>% 
+  psych::alpha()
+
+}
+
+get_bars <- function(text, start, end){
+  
+  df %>% 
+  select(num_range(prefix = text, range = start:end)) %>% 
+  map(\(x) ggplot(df, aes(x)) + geom_bar())
+  
+}
+```
+
+
+# Load Data
+
+```{r}
+df <- read_csv("data/data_all.csv")
+
+df <- df %>% 
+  slice(-c(1:2)) %>% 
+  type_convert()
+```
+
+# Data Cleaning
+
+```{r}
+df <- df %>% 
+  remove_constant() %>% 
+  mutate(across(where(is.numeric), \(x) na_if(x, -99)))
+```
+
+# Recode
+
+```{r}
+df %>% 
+  summarise(across(num_range(prefix = "attitudes_privacy_", c(1:10)), \(x) sum(x == 8, na.rm = TRUE)))
+```
+
+
+```{r}
+df <- df %>% 
+  mutate(across(num_range(prefix = "attitudes_privacy_", c(1:10)), \(x) ifelse(x == 8, NA, x))) %>% 
+  mutate(attitudes_privacy_2 = 8 - attitudes_privacy_2,
+         attitudes_privacy_5 = 8 - attitudes_privacy_5,
+         attitudes_privacy_10 = 8 - attitudes_privacy_10)
+```
+
+
+# Summary Variables
+
+```{r}
+df <- df %>% 
+  mutate(js_victim = rowMeans(select(., justice_sensitivity_1, 
+                            justice_sensitivity_2),
+                          na.rm = TRUE),
+         js_observer = rowMeans(select(., justice_sensitivity_3, 
+                            justice_sensitivity_4),
+                          na.rm = TRUE),
+         js_beneficiary = rowMeans(select(., justice_sensitivity_5, 
+                            justice_sensitivity_6),
+                          na.rm = TRUE),
+         js_perpetrator = rowMeans(select(., justice_sensitivity_7, 
+                            justice_sensitivity_8),
+                          na.rm = TRUE),
+         psych_reactance = rowMeans(select(., num_range(prefix = "psych_reactance_", c(1:11))), na.rm = TRUE),
+         att_privacy = rowMeans(select(., num_range(prefix = "attitudes_privacy_", c(1:10))), na.rm = TRUE),
+         att_advertise = rowMeans(select(., num_range(prefix = "attitudes_ad_", c(1:5))), na.rm = TRUE),
+         att_counterspeech = rowMeans(select(., num_range(prefix = "attitude_cs_", c(1:5))), na.rm = TRUE),
+         att_hate = rowMeans(select(., num_range(prefix = "perc_hs_", c(1:3))), na.rm = TRUE),
+         freq_hate = rowMeans(select(., num_range(prefix = "hs_freq", c(1:3))), na.rm = TRUE))
+```
+
+```{r}
+df %>% 
+  colnames()
+```
+
+```{r}
+df <- df %>%
+  mutate(across(starts_with("acceptance") & ends_with("1"), \(x) 8 - x)) %>% 
+  mutate(o_c_d_usage = rowMeans(select(., num_range(prefix = "usage_behavior_o_c_d_", c(1:3))), na.rm = TRUE),
+         o_c_i_usage = rowMeans(select(., num_range(prefix = "usage_behavior_o_c_i_", c(1:3))), na.rm = TRUE),
+         o_a_d_usage = rowMeans(select(., num_range(prefix = "usage_behavior_o_a_d_", c(1:3))), na.rm = TRUE),
+         o_a_i_usage = rowMeans(select(., num_range(prefix = "usage_behavior_o_a_i_", c(1:3))), na.rm = TRUE),
+         s_c_d_usage = rowMeans(select(., num_range(prefix = "usage_behavior_s_c_d_", c(1:3))), na.rm = TRUE),
+         s_c_i_usage = rowMeans(select(., num_range(prefix = "usage_behavior_s_c_i_", c(1:3))), na.rm = TRUE),
+         s_a_d_usage = rowMeans(select(., num_range(prefix = "usage_behavior_s_c_d_", c(1:3))), na.rm = TRUE),
+         s_a_i_usage = rowMeans(select(., num_range(prefix = "usage_behavior_s_c_i_", c(1:3))), na.rm = TRUE),
+         o_c_d_accept = rowMeans(select(., num_range(prefix = "acceptance_o_c_d_", c(1:3))), na.rm = TRUE),
+         o_c_i_accept = rowMeans(select(., num_range(prefix = "acceptance_o_c_i_", c(1:3))), na.rm = TRUE),
+         o_a_d_accept = rowMeans(select(., num_range(prefix = "acceptance_o_a_d_", c(1:3))), na.rm = TRUE),
+         o_a_i_accept = rowMeans(select(., num_range(prefix = "acceptance_o_a_i_", c(1:3))), na.rm = TRUE),
+         s_c_d_accept = rowMeans(select(., num_range(prefix = "acceptance_s_c_d_", c(1:3))), na.rm = TRUE),
+         s_c_i_accept = rowMeans(select(., num_range(prefix = "acceptance_s_c_i_", c(1:3))), na.rm = TRUE),
+         s_a_d_accept = rowMeans(select(., num_range(prefix = "acceptance_s_c_d_", c(1:3))), na.rm = TRUE),
+         s_a_i_accept = rowMeans(select(., num_range(prefix = "acceptance_s_c_i_", c(1:3))), na.rm = TRUE))
+```
+
+# Justice Sensitivity
+
+```{r}
+cor_js <- function(num1, num2){
+  cor(df[,paste0("justice_sensitivity_", num1)],
+      df[,paste0("justice_sensitivity_", num2)],
+      use = "complete.obs")[[1]]
+}
+```
+
+## Victim
+
+```{r}
+cor_js(1, 2)
+```
+
+```{r}
+get_bars("justice_sensitivity_", 1, 2)
+```
+
+
+## Observer
+
+```{r}
+cor_js(3, 4)
+```
+
+```{r}
+get_bars("justice_sensitivity_", 3, 4)
+```
+
+## Beneficiary
+
+```{r}
+cor_js(5,6)
+```
+
+```{r}
+get_bars("justice_sensitivity_", 5, 6)
+```
+
+## Perpetrator
+
+```{r}
+cor_js(7,8)
+```
+
+```{r}
+get_bars("justice_sensitivity_", 7, 8)
+```
+
+# Reactance
+
+```{r}
+get_alpha("psych_reactance_", 1, 11)
+```
+
+```{r}
+get_bars("psych_reactance_", 1, 11)
+```
+
+# Privacy Attitudes
+
+```{r}
+get_alpha("attitudes_privacy_", 1, 10)
+```
+
+```{r}
+get_bars("attitudes_privacy_", 1, 10)
+```
+
+
+```{r}
+colnames(df)
+```
+
+# Advertising Attitudes
+
+```{r}
+get_alpha("attitudes_ad_", 1, 5)
+```
+
+```{r}
+get_bars("attitudes_ad_", 1, 5)
+```
+
+# Counterspeech Attitudes
+
+```{r}
+get_alpha("attitude_cs_", 1, 5)
+```
+
+```{r}
+get_bars("attitude_cs_", 1, 5)
+```
+
+# Hate Speech Attitudes
+
+```{r}
+get_alpha("perc_hs_", 1, 3)
+```
+
+```{r}
+get_bars("perc_hs_", 1, 3)
+```
+
+# Hate Speech Frequency
+
+```{r}
+get_alpha("hs_freq_", 1, 3)
+```
+
+```{r}
+get_bars("hs_freq_", 1, 3)
+```
+
+# Pivot Longer
+
+```{r}
+df_long <- df %>%
+  pivot_longer(
+    cols = ends_with(c("_usage", "_accept")),
+    names_to = c("condition", "value_type"),
+    names_pattern = "(.*)_(.*)",
+    values_to = "value"
+  ) %>%
+  pivot_wider(
+    names_from = value_type,
+    values_from = value
+  )
+```
+
+```{r}
+df_long %>% 
+  mutate(prob_m = scale(usage, scale = FALSE), .by = eid) %>% 
+  summarise(mean_use = mean(prob_m, na.rm = TRUE), .by = condition) %>% 
+  arrange(desc(mean_use))
+```
+
+```{r}
+df_long %>% 
+  mutate(endorse_m = scale(accept, scale = FALSE), .by = eid) %>% 
+  summarise(mean_endorse = mean(endorse_m, na.rm = TRUE), .by = condition) %>% 
+  arrange(desc(mean_endorse))
+```
+

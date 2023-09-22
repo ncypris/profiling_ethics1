@@ -1,0 +1,294 @@
+---
+title: "Data Collection"
+author: "Niklas"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(visdat)
+```
+
+# Load Data
+
+```{r}
+df <- read_csv("data/collection/dat_col_v3.csv")
+
+double_eids <- df %>% 
+  group_by(eid) %>% 
+  count() %>% 
+  filter(n > 1)
+
+df <- df %>% 
+  slice(-c(1:2)) %>% 
+  type_convert() %>% 
+  filter(eid != "FFE1DC0E-FF7D-479D-B4BB-A1E14E4AEA88") %>% # test eid
+  slice(1, .by = eid) %>% 
+  mutate(quality_questions = ifelse(StartDate < "2023-07-24 11:42:00 UTC", "old", "new"))
+```
+
+```{r}
+df_ongoing <- read_csv("data/collection/dat_col_unfinished_v3.csv")
+
+df_ongoing <- df_ongoing %>% 
+  slice(-c(1:2)) %>% 
+  type_convert() %>% 
+  filter(eid != "FFE1DC0E-FF7D-479D-B4BB-A1E14E4AEA88") %>% # test eid
+  slice(1, .by = eid) %>% 
+  mutate(quality_questions = ifelse(StartDate < "2023-07-24 11:42:00 UTC", "old", "new"))
+```
+
+# Visualize Missing
+
+```{r}
+df %>% 
+  vis_miss()
+```
+
+# Which Redirect Do People Get
+
+Before changing up the quality questions:
+
+```{r}
+outs <- df %>% 
+  filter(quality_questions == "old") %>% 
+  mutate(finished = !is.na(comments),
+         so_consent = consent != 1,
+         so_age = age < 18 & age > 0,
+         so_language = native_language == 3,
+         so_social_media_use = social_media_use > 8,
+         bq_q1 = compr_question_2_1 != 3,
+         bq_q2 = compr_question_2_2 != 1) %>% 
+  filter(!is.na(eid)) %>% 
+  select(eid, quality_questions, starts_with("so_"), starts_with("bq"), finished)
+```
+
+After changing up the quality questions:
+
+```{r}
+outs <- df %>% 
+  filter(quality_questions == "new") %>% 
+  mutate(finished = !is.na(comments),
+         so_consent = consent != 1,
+         so_age = age < 18 & age > 0,
+         so_language = native_language == 3,
+         so_social_media_use = social_media_use > 8,
+         bq_q1 = compr_question_2_1 != 2,
+         bq_q2 = compr_question_2_2 != 1) %>% 
+  filter(!is.na(eid)) %>% 
+  select(eid, quality_questions, starts_with("so_"), starts_with("bq"), finished) %>% 
+  rbind(outs) %>% 
+  arrange(desc(so_consent), desc(so_age), desc(so_language))
+```
+
+```{r}
+outs
+```
+
+## Sanity Check
+
+For old, both quality questions have to be answered correctly to continue.
+
+Code below should reult in nrow() == 0
+
+```{r}
+outs %>% 
+  filter(quality_questions == "old") %>% 
+  filter((bq_q1 == TRUE | bq_q2 == TRUE) & finished == TRUE)
+```
+
+For new, only one quality question has to be answered correctly to continue.
+
+```{r}
+outs %>% 
+  filter(quality_questions == "new") %>% 
+  filter((bq_q1 == TRUE | bq_q2 == TRUE) & finished == TRUE)
+```
+
+```{r}
+outs %>% 
+  filter(quality_questions == "new") %>% 
+  filter((bq_q1 == TRUE & bq_q2 == TRUE) & finished == TRUE)
+```
+
+## Add Bad Quality Variable
+
+```{r}
+outs <- outs %>% 
+  mutate(bad_quality = case_when(quality_questions == "old" & (bq_q1 == TRUE | bq_q2 == TRUE) ~ TRUE,
+                                 quality_questions == "new" & (bq_q1 == TRUE & bq_q2 == TRUE) ~ TRUE,
+                                 .default = FALSE))
+```
+
+
+```{r}
+df <- df %>%
+  left_join(select(outs, eid, bad_quality))
+```
+
+```{r}
+df_ongoing <- df_ongoing %>%
+  left_join(select(outs, eid, bad_quality))
+```
+
+## Overview
+
+```{r}
+outs %>%
+  summarise(across(-c(eid, quality_questions), \(x) sum(x, na.rm = TRUE)))
+```
+
+```{r}
+outs %>% 
+  group_by(quality_questions) %>% 
+  summarise(across(-eid, \(x) sum(x, na.rm = TRUE)))
+```
+
+```{r}
+outs %>% 
+  summarise(across(-c(eid, quality_questions), \(x) sum(x, na.rm = TRUE)/nrow(outs)))
+```
+
+```{r}
+outs %>% 
+  filter(quality_questions == "old") %>% 
+  summarise(across(-c(eid, quality_questions), \(x) sum(x, na.rm = TRUE)/nrow(.)))
+```
+
+```{r}
+outs %>% 
+  filter(quality_questions == "new") %>% 
+  summarise(across(-c(eid, quality_questions), \(x) sum(x, na.rm = TRUE)/nrow(.)))
+```
+
+Screenout + Complete
+
+```{r}
+outs %>% 
+  filter(so_social_media_use == TRUE |
+           so_language == TRUE |
+           so_consent == TRUE |
+           finished == TRUE) %>% 
+  nrow()/nrow(outs)
+```
+
+## Comments
+
+```{r}
+df$comments %>% 
+  table()
+```
+
+```{r}
+df_finished <- df  %>%
+  filter(!is.na(comments))
+```
+
+```{r}
+df_finished %>% 
+  summarise(time = median(EndDate - StartDate))
+```
+
+```{r}
+table(df_finished$gender)
+```
+
+```{r}
+df_finished %>% 
+  ggplot(aes(age)) +
+  geom_bar()
+```
+
+```{r}
+df_finished <- df_finished %>% 
+  mutate(age_category = case_when(age < 34 ~ "under_34",
+                                  age >= 34 & age < 50 ~ "under_50",
+                                  age >= 50 & age < 65 ~ "under_65",
+                                  age >= 65 ~ "under_99",
+                                  .default = NA))
+```
+
+```{r}
+df_finished %>% 
+  mutate(gender = ifelse(gender == 1, "m", "w")) %>% 
+  count(age_category, gender)
+```
+
+# Where Drop Out?
+
+## After Quality Questions
+
+```{r}
+df_after_bq <- df_ongoing %>% 
+  filter(consent == 1 &
+           native_language != 3 &
+           social_media_use <= 8 & 
+           bad_quality == FALSE)
+```
+
+```{r}
+if (nrow(df_after_bq) > 0) {
+  df_after_bq[, grep("compr_question_2_2", colnames(df_after_bq)):ncol(df_after_bq)] %>% 
+  vis_miss()
+} else {
+  
+  print("Keine nach Quality")
+  
+}
+```
+
+## Before Quality Questions
+
+```{r}
+df_before_bq <- df_ongoing %>% 
+  filter(!(eid %in% df_after_bq$eid))
+```
+
+```{r}
+if (nrow(df_before_bq) > 0) {
+  df_before_bq[, 1:grep("compr_question_2_2", colnames(df_before_bq))] %>% 
+  vis_miss()
+}
+```
+
+```{r}
+sum(df_ongoing$eid %in% df$eid)
+```
+
+## Relative Amount Drop Outs
+
+```{r}
+(nrow(df_ongoing) - sum(df_ongoing$eid %in% df$eid))/(nrow(df_ongoing) - sum(df_ongoing$eid %in% df$eid) + nrow(df))
+```
+
+# Feedback Kinau
+
+```{r}
+last_obs <- df %>% 
+  arrange(desc(EndDate)) %>% 
+  slice(1) %>% 
+  pull(EndDate) %>% 
+  str_replace_all(" ", "_") %>% 
+  str_replace_all(":", "-")
+```
+
+```{r}
+outs %>%
+  summarise(across(-c(eid, quality_questions), \(x) sum(x, na.rm = TRUE))) %>% 
+  write_csv(file = paste0("data/collection/outs_", last_obs, ".csv"))
+```
+
+```{r}
+df_finished %>% 
+  mutate(gender = ifelse(gender == 1, "m", "w")) %>% 
+  count(age_category, gender) %>% 
+  write_csv(file = paste0("data/collection/quotas_", last_obs, ".csv"))
+```
+
+```{r}
+df_finished %>% 
+  select(eid) %>% 
+  write_csv(file = paste0("data/collection/eids_finished_", Sys.Date(), ".csv"))
+```
+
