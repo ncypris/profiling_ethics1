@@ -1,0 +1,110 @@
+---
+title: "02 Descriptives"
+author: "Niklas"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(visdat)
+library(DataExplorer)
+
+set.seed(161)
+Sys.setenv(LANG = "en")
+theme_set(theme_classic())
+```
+
+# Load Data
+
+```{r}
+load(file = "data/data_prep.Rda")
+```
+
+# Macro Vis
+
+```{r}
+vis_dat(df_long)
+```
+
+```{r}
+vis_miss(df_long)
+```
+
+```{r}
+plot_bar(df_long)
+```
+
+```{r}
+plot_histogram(df)
+```
+
+# Conditions
+
+```{r}
+df_long %>% 
+  mutate(prob_m = scale(usage, scale = FALSE), .by = eid) %>% 
+  summarise(mean_use = mean(prob_m, na.rm = TRUE), .by = condition) %>% 
+  arrange(desc(mean_use))
+```
+
+```{r}
+df_long %>% 
+  mutate(endorse_m = scale(accept, scale = FALSE), .by = eid) %>% 
+  summarise(mean_endorse = mean(endorse_m, na.rm = TRUE), .by = condition) %>% 
+  arrange(desc(mean_endorse))
+```
+
+
+```{r}
+df_long %>% 
+  mutate(accept = scale(accept)[,1], .by = eid) %>% 
+  lmerTest::lmer(accept ~ target * goal * data_coll + (1|eid), .) %>% 
+  summary()
+```
+
+```{r}
+df_long %>% 
+  mutate(accept = scale(accept)[,1], .by = eid) %>% 
+  lmerTest::lmer(accept ~ target * goal * data_coll + (1|eid), .) %>% 
+  marginaleffects::avg_slopes()
+```
+
+```{r}
+df_long %>% 
+  mutate(usage = scale(usage)[,1], .by = eid) %>% 
+  lmerTest::lmer(usage ~ target * goal * data_coll + (1|eid), .) %>% 
+  summary()
+```
+
+```{r}
+df_long %>% 
+  mutate(usage = scale(usage)[,1], .by = eid) %>% 
+  lmerTest::lmer(usage ~ target * goal * data_coll + (1|eid), .) %>% 
+  marginaleffects::avg_slopes()
+```
+
+```{r}
+df_long %>% 
+  mutate(accept = scale(accept), .by = eid) %>% 
+  mutate(js_victim = scale(js_victim)) %>% 
+  lmerTest::lmer(accept ~ target * goal * data_coll * js_victim + (1|eid), .) %>% 
+  summary()
+```
+
+```{r}
+df_long %>% 
+  mutate(usage = scale(usage), .by = eid) %>% 
+  mutate(js_victim = scale(js_victim)) %>% 
+  lmerTest::lmer(usage ~ target * goal * data_coll * js_victim + (1|eid), .) %>% 
+  summary()
+```
+
+
+
+

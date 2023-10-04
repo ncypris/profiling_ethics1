@@ -1,0 +1,41 @@
+---
+title: "03 Confirmatory"
+author: "Niklas"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+# Setup
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(visdat)
+library(DataExplorer)
+
+set.seed(161)
+Sys.setenv(LANG = "en")
+theme_set(theme_classic())
+```
+
+# Load Data
+
+```{r}
+load(file = "data/data_prep.Rda")
+```
+
+# Helper Functions
+
+```{r}
+z_standard <- function(data, variable){
+  
+  out <- data %>% 
+    filter(!is.na({{variable}})) %>% 
+    mutate({{variable}} := scale({{variable}})[,1])
+  
+  return(out)
+}
+```
+

@@ -10,6 +10,8 @@ library(tidyverse)
 library(janitor)
 library(visdat)
 library(psych)
+
+theme_set(theme_classic())
 ```
 
 ```{r}
@@ -38,22 +40,48 @@ df <- read_csv("data/data_all.csv")
 
 df <- df %>% 
   slice(-c(1:2)) %>% 
-  type_convert()
+  type_convert() %>% 
+  filter(eid != "FFE1DC0E-FF7D-479D-B4BB-A1E14E4AEA88" | is.na(eid)) %>% # test eid
+  slice(1, .by = eid) %>% 
+  mutate(quality_questions = ifelse(StartDate < "2023-07-24 11:42:00 UTC", "old", "new"))
+```
+
+# Drop Outs
+
+Before changing up the quality questions:
+
+```{r}
+df <- df %>% 
+  mutate(finished = !is.na(comments),
+         so_consent = consent != 1,
+         so_age = age < 18 & age > 0,
+         so_language = native_language == 3,
+         so_social_media_use = social_media_use > 8,
+         so_bad_quality = case_when(quality_questions == "old" & (compr_question_2_1 != 3 | compr_question_2_2 != 1) ~ TRUE,
+                                 quality_questions == "new" & (compr_question_2_1 != 2 & compr_question_2_2 != 1) ~ TRUE,
+                                 .default = FALSE))
+```
+
+```{r}
+df %>% 
+  summarise(across(starts_with("so_"), \(x) sum(x, na.rm = TRUE)))
 ```
 
 # Data Cleaning
 
 ```{r}
 df <- df %>% 
-  remove_constant() %>% 
-  mutate(across(where(is.numeric), \(x) na_if(x, -99)))
+  filter(if_any(starts_with("so_"), \(x) x == FALSE)) %>% # drop screenouts
+  filter(finished == TRUE) %>%  # keep only finished obs
+  mutate(across(where(is.numeric), \(x) na_if(x, -99))) %>% 
+  remove_constant()
 ```
 
 # Recode
 
 ```{r}
 df %>% 
-  summarise(across(num_range(prefix = "attitudes_privacy_", c(1:10)), \(x) sum(x == 8, na.rm = TRUE)))
+  summarise(across(num_range(prefix = "attitudes_privacy_", c(1:10)), \(x) sum(x == 8, na.rm = TRUE))) # sum: prefer not to answer
 ```
 
 
@@ -88,11 +116,6 @@ df <- df %>%
          att_counterspeech = rowMeans(select(., num_range(prefix = "attitude_cs_", c(1:5))), na.rm = TRUE),
          att_hate = rowMeans(select(., num_range(prefix = "perc_hs_", c(1:3))), na.rm = TRUE),
          freq_hate = rowMeans(select(., num_range(prefix = "hs_freq", c(1:3))), na.rm = TRUE))
-```
-
-```{r}
-df %>% 
-  colnames()
 ```
 
 ```{r}
@@ -187,11 +210,6 @@ get_alpha("attitudes_privacy_", 1, 10)
 get_bars("attitudes_privacy_", 1, 10)
 ```
 
-
-```{r}
-colnames(df)
-```
-
 # Advertising Attitudes
 
 ```{r}
@@ -249,16 +267,14 @@ df_long <- df %>%
 ```
 
 ```{r}
-df_long %>% 
-  mutate(prob_m = scale(usage, scale = FALSE), .by = eid) %>% 
-  summarise(mean_use = mean(prob_m, na.rm = TRUE), .by = condition) %>% 
-  arrange(desc(mean_use))
+df_long <- df_long %>% 
+  mutate(target = ifelse(str_detect(condition, "o"), "other", "self") %>% fct_relevel("self"),
+         goal = ifelse(str_detect(condition, "a"), "advertisement", "counterspeech") %>% fct_relevel("counterspeech"),
+         data_coll = ifelse(str_detect(condition, "i"), "indirect", "disclosed") %>% fct_relevel("disclosed"))
 ```
+
+# Save
 
 ```{r}
-df_long %>% 
-  mutate(endorse_m = scale(accept, scale = FALSE), .by = eid) %>% 
-  summarise(mean_endorse = mean(endorse_m, na.rm = TRUE), .by = condition) %>% 
-  arrange(desc(mean_endorse))
+save(df, df_long, file = "data/data_prep.Rda")
 ```
-
